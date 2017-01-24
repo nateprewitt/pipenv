@@ -52,19 +52,19 @@ def ensure_pipfile(dev=False):
 def ensure_virtualenv(three=None):
     """Creates a virtualenv, if one doesn't exist."""
 
-    if not project.virtualenv_exists:
+    if not project.name in delegator.run('pew ls').out.split():
         do_create_virtualenv(three=three)
 
     # If --three / --two were passed...
     elif three is not None:
         click.echo(crayons.red('Virtualenv already exists!'))
-        click.echo(crayons.yellow('Removing existing virtualenv...'))
+        click.echo(crayons.yellow('Re-creating virtualenv...'))
 
         # Remove the virtualenv.
-        shutil.rmtree(project.virtualenv_location)
+        # shutil.rmtree(project.virtualenv_location)
 
         # Call this function again.
-        ensure_virtualenv(three=three)
+        do_create_virtualenv(three=three)
 
 
 
@@ -152,7 +152,7 @@ def do_create_virtualenv(three=None):
     click.echo(crayons.yellow('Creating a virtualenv for this project...'))
 
     # The command to create the virtualenv.
-    cmd = ['virtualenv', project.virtualenv_location, '--prompt=({0})'.format(project.name)]
+    cmd = ['pew', 'new', project.name, '-d']
 
     # Pass a Python version to virtualenv, if needed.
     if three is False:
@@ -221,26 +221,6 @@ def do_lock(dev=False):
     else:
         # Install only development dependencies.
         do_install_dependencies(dev=True, only=True, bare=True)
-
-
-def activate_virtualenv(source=True):
-    """Returns the string to activate a virtualenv."""
-
-    # Suffix for other shells.
-    suffix = ''
-
-    # Support for fish shell.
-    if 'fish' in os.environ['SHELL']:
-        suffix = '.fish'
-
-    # Support for csh shell.
-    if 'csh' in os.environ['SHELL']:
-        suffix = '.csh'
-
-    if source:
-        return 'source {0}/bin/activate{1}'.format(project.virtualenv_location, suffix)
-    else:
-        return '{0}/bin/activate'.format(project.virtualenv_location)
 
 
 def do_activate_virtualenv(bare=False):
@@ -479,35 +459,9 @@ def shell(three=None):
     # Set an environment variable, so we know we're in the environment.
     os.environ['PIPENV_ACTIVE'] = '1'
 
-    # Spawn the Python process, and interact with it.
-    shell = os.environ['SHELL']
     click.echo(crayons.yellow('Spawning environment shell ({0}).'.format(crayons.red(shell))))
 
-    # Grab current terminal dimensions to replace the hardcoded default
-    # dimensions of pexpect
-    terminal_dimensions = get_terminal_size()
-
-    c = pexpect.spawn(
-            "{0} -c '. {1}; exec {0} -i'".format(
-                shell,
-                activate_virtualenv(source=False)
-            ),
-            dimensions=(
-                terminal_dimensions.lines,
-                terminal_dimensions.columns
-            )
-        )
-
-    # Activate the virtualenv.
-    c.send(activate_virtualenv() + '\n')
-
-    # Handler for terminal resizing events
-    # Must be defined here to have the shell process in its context, since we
-    # can't pass it as an argument
-    def sigwinch_passthrough(sig, data):
-        terminal_dimensions = get_terminal_size()
-        c.setwinsize(terminal_dimensions.lines, terminal_dimensions.columns)
-    signal.signal(signal.SIGWINCH, sigwinch_passthrough)
+    c = pexpect.spawn('pew workon {0}'.format(project.name))
 
     # Interact with the new shell.
     c.interact()
