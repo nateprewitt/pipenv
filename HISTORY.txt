@@ -5,6 +5,7 @@
  - Fix proper casing mechanism.
  - Prevent invalid shebangs with Homebrew Python.
  - Fix parsing issues with https://pypi.org/simple
+ - Support packages distributed with alternate compressions (bzip, 7z, xz)
 3.2.3:
  - $ pip uninstall --dev
  - Minor refactoring.
