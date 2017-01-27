@@ -309,7 +309,7 @@ def parse_download_fname(fname):
 
 
 def get_downloads_info(names_map):
-    info = []
+    info = set([])
 
     for fname in os.listdir(project.download_location):
 
@@ -325,7 +325,7 @@ def get_downloads_info(names_map):
         c = delegator.run('{0} hash {1}'.format(which_pip(), os.sep.join([project.download_location, fname])))
         hash = c.out.split('--hash=')[1].strip()
 
-        info.append(dict(name=name, version=version, hash=hash))
+        info.add(dict(name=name, version=version, hash=hash))
 
     return info
 
