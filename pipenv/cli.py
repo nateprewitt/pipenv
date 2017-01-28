@@ -233,7 +233,6 @@ def do_download_dependencies(dev=False, only=False, bare=False):
     deps = convert_deps_to_pip(deps, r=False)
 
     # Actually install each dependency into the virtualenv.
-    name_map = {}
     for package_name in deps:
 
         if not bare:
@@ -244,36 +243,6 @@ def do_download_dependencies(dev=False, only=False, bare=False):
 
         if not bare:
             click.echo(crayons.blue(c.out))
-
-        parsed_output = parse_install_output(c.out)
-        for filename, name in parsed_output:
-            name_map[filename] = name
-
-    return name_map
-
-def parse_install_output(output):
-    """Parse output from pip download to get name and file mappings
-    for all dependencies and their sub dependencies.
-
-    This is required for proper file hashing with --require-hashes
-    """
-    output_sections = output.split('Collecting ')
-    names = []
-
-    for section in output_sections:
-        lines = section.split('\n')
-        # strip dependency data wrapped in parens
-        name = lines[0].split('(')[0]
-        for line in lines:
-            r = parse.parse('Saved {file}', line.strip())
-            if r is None:
-                r = parse.parse('Using cached {file}', line.strip())
-            if r is None:
-                continue
-            names.append((r['file'].replace('./.venv/downloads/',''), name))
-            break
-                
-    return names
 
 
 def do_create_virtualenv(three=None):
