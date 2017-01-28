@@ -506,8 +506,8 @@ def proper_case(package_name):
     parser = SimpleHTMLParser()
     parser.feed(r.text)
 
-    r = parse.parse('Links for {name}', collected[1])
-    return r['name']
+    # Use the last link on the page, use it to get proper casing.
+    return parse_download_fname(collected[-1])[0]
 
 
 def format_help(help):
