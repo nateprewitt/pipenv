@@ -279,7 +279,6 @@ def parse_download_fname(fname):
     name = r['name']
     version = r['version']
 
-    # Support for requirements-parser-0.1.0.tar.gz
     # TODO: Some versions might actually have dashes, will need to figure that out.
     # Will likely have to check of '-' comes at beginning or end of version.
     if '-' in version:
