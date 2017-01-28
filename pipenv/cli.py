@@ -280,7 +280,7 @@ def parse_download_fname(fname):
         name = '-'.join([name] + version.split('-')[:-1])
         version = version.split('-')[-1]
 
-    return name, version
+    return proper_case(name), version
 
 
 def get_downloads_info():
@@ -498,6 +498,8 @@ def proper_case(package_name):
     parser = SimpleHTMLParser()
     parser.feed(r.text)
 
+    parsed_name = parse.parse('Links for {name}', collected[0])
+    return parsed_name['name']
     # Use the last link on the page, use it to get proper casing.
     return parse_download_fname(collected[-1])[0]
 
