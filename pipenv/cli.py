@@ -116,15 +116,10 @@ def ensure_proper_casing():
 
             # Replace each package with proper casing.
             for dep in p[section].keys():
-
                 # Attempt to normalize name from PyPI.
                 # Use provided name if better one can't be found.
-                try:
-                    # Get new casing for package name.
-                    new_casing = proper_case(dep)
-                except IOError:
-                    # Unable to normalize package name.
-                    continue
+                # Get new casing for package name.
+                new_casing = dep.lower().replace('_', '-')
 
                 if new_casing == dep:
                     continue
@@ -245,7 +240,6 @@ def do_download_dependencies(dev=False, only=False, bare=False):
     deps = convert_deps_to_pip(deps, r=False)
 
     # Actually install each dependency into the virtualenv.
-    name_map = {}
     for package_name in deps:
 
         if not bare:
@@ -256,41 +250,6 @@ def do_download_dependencies(dev=False, only=False, bare=False):
 
         if not bare:
             click.echo(crayons.blue(c.out))
-
-        parsed_output = parse_install_output(c.out)
-        for filename, name in parsed_output:
-            name_map[filename] = name
-
-    return name_map
-
-
-def parse_install_output(output):
-    """Parse output from pip download to get name and file mappings
-    for all dependencies and their sub dependencies.
-
-    This is required for proper file hashing with --require-hashes.
-    """
-    output_sections = output.split('Collecting ')
-    names = []
-
-    for section in output_sections:
-        lines = section.split('\n')
-
-        # Strip dependency parens from name line. e.g. package (from other_package)
-        name = lines[0].split('(')[0]
-        # Strip version specification. e.g. package; python-version=2.6
-        name = name.split(';')[0]
-
-        for line in lines:
-            r = parse.parse('Saved {file}', line.strip())
-            if r is None:
-                r = parse.parse('Using cached {file}', line.strip())
-            if r is None:
-                continue
-            names.append((r['file'].replace('./.venv/downloads/', ''), name.strip()))
-            break
-
-    return names
 
 
 def do_create_virtualenv(three=None, python=None):
@@ -328,27 +287,27 @@ def parse_download_fname(fname):
     if not r:
         r = parse.parse('{name}-{version}-{extra}.{ext}', fname)
 
+    name = r['name']
     version = r['version']
 
     # Support for requirements-parser-0.1.0.tar.gz
     # TODO: Some versions might actually have dashes, will need to figure that out.
     # Will likely have to check of '-' comes at beginning or end of version.
     if '-' in version:
+        name = '-'.join([name] + version.split('-')[:-1])
         version = version.split('-')[-1]
 
-    return version
+    return name.lower().replace('_','-'), version
 
 
-def get_downloads_info(names_map, section):
+def get_downloads_info(section):
     info = []
 
     p = project.parsed_pipfile
 
     for fname in os.listdir(project.download_location):
-        # Get name from filename mapping.
-        name = list(convert_deps_from_pip(names_map[fname]))[0]
         # Get the version info from the filenames.
-        version = parse_download_fname(fname)
+        name, version = parse_download_fname(fname)
 
         # Get the hash of each file.
         c = delegator.run('{0} hash {1}'.format(which_pip(), os.sep.join([project.download_location, fname])))
@@ -372,14 +331,14 @@ def do_lock():
     click.echo(crayons.yellow('Locking {0} dependencies...'.format(crayons.red('[dev-packages]'))))
 
     # Install only development dependencies.
-    names_map = do_download_dependencies(dev=True, only=True, bare=True)
+    do_download_dependencies(dev=True, only=True, bare=True)
 
     # Load the Pipfile and generate a lockfile.
     p = pipfile.load(project.pipfile_location)
     lockfile = json.loads(p.lock())
 
     # Pip freeze development dependencies.
-    results = get_downloads_info(names_map, 'dev-packages')
+    results = get_downloads_info('dev-packages')
 
     # Add Development dependencies to lockfile.
     for dep in results:
@@ -395,7 +354,7 @@ def do_lock():
     names_map = do_download_dependencies(bare=True)
 
     # Pip freeze default dependencies.
-    results = get_downloads_info(names_map, 'packages')
+    results = get_downloads_info('packages')
 
     # Add default dependencies to lockfile.
     for dep in results:
@@ -538,40 +497,6 @@ def which_pip(allow_global=False):
     return which('pip')
 
 
-def proper_case(package_name):
-
-    # Skip checking proper-case if it's already a good name.
-    if package_name in project.proper_names:
-        return package_name
-
-    # Capture tag contents here.
-    collected = []
-
-    class SimpleHTMLParser(HTMLParser):
-        def handle_data(self, data):
-            # Remove extra blank data from https://pypi.org/simple
-            data = data.strip()
-            if len(data) > 2:
-                collected.append(data)
-
-    # Hit the simple API.
-    r = requests.get('{0}/{1}'.format(project.source['url'], package_name))
-    if not r.ok:
-        raise IOError('Unable to find package {0} in PyPI repository.'.format(crayons.green(package_name)))
-
-    # Parse the HTML.
-    parser = SimpleHTMLParser()
-    parser.feed(r.text)
-
-    r = parse.parse('Links for {name}', collected[1])
-    good_name = r['name'].strip()
-
-    # Register the good name for future reference.
-    project.register_proper_name(good_name)
-
-    return good_name
-
-
 def format_help(help):
     """Formats the help string."""
     help = help.replace('  check', str(crayons.green('  check')))
@@ -681,13 +606,7 @@ def install(package_name=False, more_packages=False, dev=False, three=False, pyt
     for package_name in package_names:
 
         # Proper-case incoming package name (check against API).
-        old_name = [k for k in convert_deps_from_pip(package_name).keys()][0]
-        try:
-            new_name = proper_case(old_name)
-        except IOError as e:
-            click.echo('{0} {1}'.format(crayons.red('Error: '), e.args[0], crayons.green(package_name)))
-            continue
-        package_name = package_name.replace(old_name, new_name)
+        package_name = package_name.lower()
 
         click.echo('Installing {0}...'.format(crayons.green(package_name)))
 
