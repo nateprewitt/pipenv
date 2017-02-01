@@ -343,16 +343,9 @@ def parse_download_fname(fname):
     if fname.endswith('.tar'):
         fname, _ = os.path.splitext(fname)
 
-    fname_components = fname.split('-')
-    for fname_component in fname_components:
-        if is_version(fname_component):
-            have_found_version_start = True
-        if have_found_version_start:
-            if len(version) > 0:
-                version += '-'
-            version += fname_component
+    version_components = [comp for comp in fname.split('-') if is_version(comp)]
 
-    return version
+    return '-'.join(version_components)
 
 
 def get_downloads_info(names_map, section):
