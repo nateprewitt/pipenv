@@ -279,6 +279,8 @@ def parse_install_output(output):
 
     This is required for proper file hashing with --require-hashes.
     """
+
+    click.echo(output)
     output_sections = output.split('Collecting ')
     names = []
 
