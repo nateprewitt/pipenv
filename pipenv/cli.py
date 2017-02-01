@@ -16,6 +16,7 @@ import pexpect
 import requests
 import pipfile
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from requests.compat import OrderedDict
 
 from .project import Project
 from .utils import convert_deps_from_pip, convert_deps_to_pip, is_required_version
@@ -194,12 +195,12 @@ def do_install_dependencies(dev=False, only=False, bare=False, requirements=Fals
     if only or not project.lockfile_exists:
         if not bare:
             click.echo(crayons.yellow('Installing dependencies from Pipfile...'))
-            lockfile = json.loads(p.lock())
+            lockfile = json.loads(p.lock(), object_pairs_hook=OrderedDict)
     else:
         if not bare:
             click.echo(crayons.yellow('Installing dependencies from Pipfile.lock...'))
         with open(project.lockfile_location, 'r') as f:
-            lockfile = json.load(f)
+            lockfile = json.load(f, object_pairs_hook=OrderedDict)
 
     # Install default dependencies, always.
     deps = lockfile['default'] if not only else {}
@@ -366,7 +367,7 @@ def get_downloads_info(names_map, section):
         # and not one from a dependency.
         specified_version = p[section].get(name, '')
         if is_required_version(version, specified_version):
-            info.append(dict(name=name, version=version, hash=hash))
+            info.append(OrderedDict(name=name, version=version, hash=hash))
 
     return info
 
@@ -384,13 +385,13 @@ def do_lock():
 
     # Load the Pipfile and generate a lockfile.
     p = pipfile.load(project.pipfile_location)
-    lockfile = json.loads(p.lock())
+    lockfile = json.loads(p.lock(), object_pairs_hook=OrderedDict)
 
     # Pip freeze development dependencies.
     results = get_downloads_info(names_map, 'dev-packages')
 
     # Clear generated lockfile before updating.
-    lockfile['develop'] = {}
+    lockfile['develop'] = OrderedDict()
 
     # Add Development dependencies to lockfile.
     for dep in results:
@@ -409,7 +410,7 @@ def do_lock():
     results = get_downloads_info(names_map, 'packages')
 
     # Clear generated lockfile before updating.
-    lockfile['default'] = {}
+    lockfile['default'] = OrderedDict()
 
     # Add default dependencies to lockfile.
     for dep in results:
