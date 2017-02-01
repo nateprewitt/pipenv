@@ -298,7 +298,11 @@ def parse_install_output(output):
                 r = parse.parse('Using cached {file}', line.strip())
             if r is None:
                 continue
-            names.append((r['file'].replace('./.venv/downloads/', ''), name.strip()))
+
+            fname = r['file']
+            if 'pipenv/downloads/' in fname:
+                fname = fname.split('pipenv/downloads/')[1]
+            names.append((fname.strip(), name.strip()))
             break
 
     return names
