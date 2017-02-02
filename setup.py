@@ -22,6 +22,7 @@ if sys.argv[-1] == "publish":
 
 required = [
     'crayons',
+    'contoml',
     'toml',
     'click>=6.7',
     'click-completion',

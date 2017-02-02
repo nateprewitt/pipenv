@@ -3,6 +3,7 @@ import os
 
 import pipfile
 import toml
+import contoml
 
 import delegator
 from requests.compat import OrderedDict
@@ -104,13 +105,15 @@ class Project(object):
 
     def create_pipfile(self):
         data = {u'source': [{u'url': u'https://pypi.python.org/simple', u'verify_ssl': True}], u'packages': {}, 'dev-packages': {}}
-        with open('Pipfile', 'w') as f:
-            f.write(toml.dumps(data))
+        self.write(data, 'Pipfile')
 
-    def write(self, data):
+    def write(self, data, path=None):
+        if path is None:
+            path = self.pipfile_location
+
         # format TOML data.
-        with open(self.pipfile_location, 'w') as f:
-            f.write(format_toml(toml.dumps(data)))
+        with open(path, 'w') as f:
+            f.write(format_toml(contoml.dumps(data)))
 
     @property
     def source(self):
@@ -137,9 +140,7 @@ class Project(object):
                 del p[key][package_name]
 
         # Write Pipfile.
-        data = format_toml(toml.dumps(p))
-        with open(pipfile_path, 'w') as f:
-            f.write(data)
+        self.write(p, pipfile_path)
 
     def add_package_to_pipfile(self, package_name, dev=False):
 
@@ -162,6 +163,4 @@ class Project(object):
         p[key][package_name] = package[package_name]
 
         # Write Pipfile.
-        data = format_toml(toml.dumps(p))
-        with open(pipfile_path, 'w') as f:
-            f.write(data)
+        self.write(p, pipfile_path)
