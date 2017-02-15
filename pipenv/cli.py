@@ -90,7 +90,7 @@ def ensure_pipfile(validate=True):
     # Validate the Pipfile's contents.
     if validate and project.virtualenv_exists:
         # Ensure that Pipfile is using proper casing.
-        p = project.parsed_pipfile
+        p = project._internal_parsed_pipfile
         changed = ensure_proper_casing(pfile=p)
 
         # Write changes out to disk.
@@ -241,12 +241,15 @@ def do_download_dependencies(dev=False, only=False, bare=False):
     """"Executes the download functionality."""
 
     # Load the Pipfile.
-    p = pipfile.load(project.pipfile_location)
+    p = project._internal_parsed_pipfile
+    pfile = pipfile.load(project.pipfile_location)
 
     # Load the Pipfile.
     if not bare:
         click.echo(crayons.yellow('Downloading dependencies from Pipfile...'))
-    lockfile = json.loads(p.lock())
+    lockfile = json.loads(pfile.lock())
+    vcs_list = p.get('packages-vcs', {})
+    lockfile['default'] = {k:v for k, v in lockfile['default'].items() if k not in vcs_list}
 
     # Install default dependencies, always.
     deps = lockfile['default'] if not only else {}
@@ -254,6 +257,8 @@ def do_download_dependencies(dev=False, only=False, bare=False):
     # Add development deps if --dev was passed.
     if dev:
         deps.update(lockfile['develop'])
+        vcs_list = p.get('dev-packages-vcs', {})
+        lockfile['develop'] = {k:v for k, v in lockfile['develop'].items() if k not in vcs_list}
 
     # Convert the deps to pip-compatible arguments.
     deps = convert_deps_to_pip(deps, r=False)
@@ -399,8 +404,8 @@ def do_lock():
         names_map = do_download_dependencies(dev=True, only=True, bare=True)
 
     # Load the Pipfile and generate a lockfile.
-    p = pipfile.load(project.pipfile_location)
-    lockfile = json.loads(p.lock())
+    p = project._internal_parsed_pipfile
+    lockfile = project.lockfile_content
 
     # Pip freeze development dependencies.
     with spinner():
@@ -413,6 +418,8 @@ def do_lock():
     for dep in results:
         if dep:
             lockfile['develop'].update({dep['name']: {'hash': dep['hash'], 'version': '=={0}'.format(dep['version'])}})
+    if 'dev-packages-vcs' in p:
+        lockfile['develop'].update(p['dev-packages-vcs'])
 
     with spinner():
         # Purge the virtualenv download dir, for default dependencies.
@@ -435,6 +442,9 @@ def do_lock():
         if dep:
             lockfile['default'].update({dep['name']: {'hash': dep['hash'], 'version': '=={0}'.format(dep['version'])}})
 
+    if 'packages-vcs' in p:
+        lockfile['default'].update(p['packages-vcs'])
+    
     # Write out lockfile.
     with open(project.lockfile_location, 'w') as f:
         f.write(json.dumps(lockfile, indent=4, separators=(',', ': ')))
