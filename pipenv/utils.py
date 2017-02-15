@@ -4,6 +4,8 @@ import tempfile
 
 import requirements
 
+# List of version control systems we support.
+VCS_LIST = ('git', 'svn', 'hg', 'bzr')
 
 def format_toml(data):
     """Pretty-formats a given toml string."""
@@ -85,7 +87,7 @@ def convert_deps_to_pip(deps, r=True):
             version = deps[dep]['version']
 
         # Support for version control
-        maybe_vcs = [vcs for vcs in ('git', 'svn', 'hg', 'bzr') if vcs in deps[dep]]
+        maybe_vcs = [vcs for vcs in VCS_LIST if vcs in deps[dep]]
         vcs = maybe_vcs[0] if maybe_vcs else None
 
         if vcs:
@@ -144,3 +146,12 @@ def is_required_version(version, specified_version):
     if specified_version.startswith('=='):
         return version.strip() == specified_version.split('==')[1].strip()
     return True
+
+
+def only_vcs_entries(pfile):
+   vcs_entries = {}
+   for k, v in pfile.items():
+       # If entry is a dict and has a known vcs in its keys.
+       if isinstance(v, dict) and len([key for key in v.keys() if key in VCS_LIST]) >= 1:
+           vcs_entries.update({k: v})
+   return vcs_entries

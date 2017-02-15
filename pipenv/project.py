@@ -8,8 +8,8 @@ import toml
 import delegator
 from requests.compat import OrderedDict
 
-from .utils import format_toml, mkdir_p
-from .utils import convert_deps_from_pip
+from .utils import (format_toml, mkdir_p, convert_deps_from_pip,
+    only_vcs_entries)
 from .environments import PIPENV_MAX_DEPTH, PIPENV_VENV_IN_PROJECT
 
 
@@ -102,6 +102,17 @@ class Project(object):
     def parsed_pipfile(self):
         with open(self.pipfile_location) as f:
             return toml.load(f, _dict=OrderedDict)
+
+    @property
+    def _internal_parsed_pipfile(self):
+        """Pipfile divided by PyPI and external dependencies"""
+        pfile = self.parsed_pipfile
+        for section in ('packages', 'dev-packages'):
+            vcs_entries = only_vcs_entries(pfile[section])
+            pfile[section+'-vcs'] = vcs_entries
+            for key in vcs_entries.keys():
+                del pfile[section][key]
+        return pfile
 
     @property
     def lockfile_location(self):
