@@ -21,7 +21,8 @@ from blindspin import spinner
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 from .project import Project
-from .utils import convert_deps_from_pip, convert_deps_to_pip, is_required_version
+from .utils import (convert_deps_from_pip, convert_deps_to_pip, is_required_version,
+    only_vcs_entries)
 from .__version__ import __version__
 from . import pep508checker
 from .environments import PIPENV_COLORBLIND, PIPENV_NOSPIN, PIPENV_SHELL_COMPAT, PIPENV_VENV_IN_PROJECT
@@ -211,18 +212,26 @@ def do_install_dependencies(dev=False, only=False, bare=False, requirements=Fals
     if dev:
         deps.update(lockfile['develop'])
 
+    vcs_deps = only_vcs_entries(deps)
+    # Remove vcs dependencies from file that will check hashes.
+    for entry in vcs_deps:
+        del deps[entry]
+
     # Convert the deps to pip-compatible arguments.
-    deps_path = convert_deps_to_pip(deps)
+    hashed_deps_path = convert_deps_to_pip(deps)
+    vcs_deps_path = convert_deps_to_pip(vcs_deps)
 
     # --requirements was passed.
     if requirements:
-        with open(deps_path) as f:
+        with open(hashed_deps_path) as f:
             click.echo(f.read())
-            sys.exit(0)
+        with open(vcs_deps_path) as f:
+            click.echo(f.read())
+        sys.exit(0)
 
     # pip install:
     with spinner():
-        c = pip_install(r=deps_path, allow_global=allow_global)
+        c = pip_install(r=hashed_deps_path, require_hashes=True, allow_global=allow_global)
 
     if c.return_code != 0:
         click.echo(crayons.red('An error occured while installing!'))
@@ -230,11 +239,25 @@ def do_install_dependencies(dev=False, only=False, bare=False, requirements=Fals
         sys.exit(c.return_code)
 
     if not bare:
-        click.echo(crayons.blue(format_pip_output(c.out, r=deps_path)))
+        click.echo(crayons.blue(format_pip_output(c.out, r=hashed_deps_path)))
+
+    with spinner():
+        with open(vcs_deps_path) as f:
+            print(f.read())
+        c = pip_install(r=vcs_deps_path, allow_global=allow_global)
+
+    if c.return_code != 0:
+        click.echo(crayons.red('An error occured while installing!'))
+        click.echo(crayons.blue(format_pip_error(c.err)))
+        sys.exit(c.return_code)
+
+    if not bare:
+        click.echo(crayons.blue(format_pip_output(c.out, r=vcs_deps_path)))
 
     # Cleanup the temp requirements file.
     if requirements:
-        os.remove(deps_path)
+        os.remove(hashed_deps_path)
+        os.remove(vcs_deps_path)
 
 
 def do_download_dependencies(dev=False, only=False, bare=False):
@@ -405,7 +428,8 @@ def do_lock():
 
     # Load the Pipfile and generate a lockfile.
     p = project._internal_parsed_pipfile
-    lockfile = project.lockfile_content
+    pfile = pipfile.load(project.pipfile_location)
+    lockfile = json.loads(pfile.lock())
 
     # Pip freeze development dependencies.
     with spinner():
@@ -560,13 +584,18 @@ def do_init(dev=False, requirements=False, skip_virtualenv=False, allow_global=F
     do_activate_virtualenv()
 
 
-def pip_install(package_name=None, r=None, allow_global=False):
+def pip_install(package_name=None, r=None, allow_global=False, require_hashes=False):
     # try installing for each source in project.sources
     for source in project.sources:
         if r:
-            c = delegator.run('{0} install -r {1} --require-hashes -i {2}'.format(which_pip(allow_global=allow_global), r, source['url']))
+            install_reqs = ' -r {0}'.format(r)
         else:
-            c = delegator.run('{0} install "{1}" -i {2}'.format(which_pip(allow_global=allow_global), package_name, source['url']))
+            install_reqs = ' "{0}"'.format(package_name)
+
+        if require_hashes:
+            install_reqs += ' --require-hashes'
+
+        c = delegator.run('{0} install {1} -i {2}'.format(which_pip(allow_global=allow_global), install_reqs, source['url']))
 
         if c.return_code == 0:
             break
