@@ -29,8 +29,8 @@ class TestPipenv():
         assert version == expected
 
     def test_cli_usage(self):
-        delegator.run('mkdir test_project')
-        os.chdir('test_project')
+        delegator.run('mkdir test-project')
+        os.chdir('test-project')
 
         os.environ['PIPENV_VENV_IN_PROJECT'] = '1'
 
@@ -45,7 +45,7 @@ class TestPipenv():
         assert 'pytest' in delegator.run('cat Pipfile.lock').out
 
         os.chdir('..')
-        delegator.run('rm -fr test_project')
+        delegator.run('rm -fr test-project')
 
     def test_ensure_proper_casing_names(self):
         """Ensure proper casing for package names."""
@@ -184,3 +184,35 @@ class TestPipenv():
         c = pip_install('package')
         assert c.return_code == 0
         assert c == first_cmd_return
+
+    def test_project_with_spaces(self):
+        del os.environ['PIPENV_VENV_IN_PROJECT']
+
+        delegator.run('mkdir "test pro ject"')
+        os.chdir('test pro ject')
+
+        assert delegator.run('touch Pipfile').return_code == 0
+
+        c = delegator.run('pipenv --python python')
+        if c.return_code != 0:
+            os.chdir('..')
+            delegator.run('rm -fr "test pro ject"')
+            pytest.fail(c.out)
+        c = delegator.run('pipenv install requests')
+        if c.return_code != 0:
+            os.chdir('..')
+            delegator.run('rm -fr "test pro ject"')
+            pytest.fail(c.out)
+        c = delegator.run('pipenv install pytest --dev')
+        if c.return_code != 0:
+            os.chdir('..')
+            delegator.run('rm -fr "test pro ject"')
+            pytest.fail(c.out)
+        assert delegator.run('pipenv lock').return_code == 0
+
+        assert 'pytest' in delegator.run('cat Pipfile').out
+        assert 'pytest' in delegator.run('cat Pipfile.lock').out
+
+        os.chdir('..')
+        delegator.run('rm -fr "test pro ject"')
+
