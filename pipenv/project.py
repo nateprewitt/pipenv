@@ -108,21 +108,24 @@ class Project(object):
         """Pipfile divided by PyPI and external dependencies"""
         pfile = self.parsed_pipfile
         for section in ('packages', 'dev-packages'):
-            vcs_entries = only_vcs_entries(pfile[section])
-            pfile[section+'-vcs'] = vcs_entries
-            for key in vcs_entries.keys():
-                del pfile[section][key]
+            if section in pfile.keys():
+                vcs_entries = only_vcs_entries(pfile[section])
+                pfile[section+'-vcs'] = vcs_entries
+                for key in vcs_entries.keys():
+                    del pfile[section][key]
         return pfile
 
+    @property
     def _split_lockfile(self):
         """Pipfile.lock divided by PyPI and external dependencies"""
         pfile = pipfile.load(self.pipfile_location)
         lockfile = json.loads(pfile.lock())
         for section in ('develop', 'default'):
-            vcs_entries = only_vcs_entries(lockfile[section])
-            lockfile[section+'-vcs'] = vcs_entries
-            for key in vcs_entries.keys():
-                del lockfile[section][key]
+            if section in pfile:
+                vcs_entries = only_vcs_entries(lockfile[section])
+                lockfile[section+'-vcs'] = vcs_entries
+                for key in vcs_entries.keys():
+                    del lockfile[section][key]
         return lockfile
 
     @property

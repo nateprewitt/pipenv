@@ -193,7 +193,9 @@ def do_install_dependencies(dev=False, only=False, bare=False, requirements=Fals
 
     # Load the Pipfile.
     p = pipfile.load(project.pipfile_location)
+    lockfile = project._split_lockfile
 
+    '''
     # Load the lockfile if it exists, or if only is being used (e.g. lock is being used).
     if only or not project.lockfile_exists:
         if not bare:
@@ -204,6 +206,7 @@ def do_install_dependencies(dev=False, only=False, bare=False, requirements=Fals
             click.echo(crayons.yellow('Installing dependencies from Pipfile.lock...'))
         with open(project.lockfile_location) as f:
             lockfile = json.load(f)
+    '''
 
     # Install default dependencies, always.
     deps = lockfile['default'] if not only else {}
