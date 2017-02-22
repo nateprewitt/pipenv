@@ -104,7 +104,7 @@ class Project(object):
             return toml.load(f, _dict=OrderedDict)
 
     @property
-    def _internal_parsed_pipfile(self):
+    def _split_pipfile(self):
         """Pipfile divided by PyPI and external dependencies"""
         pfile = self.parsed_pipfile
         for section in ('packages', 'dev-packages'):
@@ -113,6 +113,17 @@ class Project(object):
             for key in vcs_entries.keys():
                 del pfile[section][key]
         return pfile
+
+    def _split_lockfile(self):
+        """Pipfile.lock divided by PyPI and external dependencies"""
+        pfile = pipfile.load(self.pipfile_location)
+        lockfile = json.loads(pfile.lock())
+        for section in ('develop', 'default'):
+            vcs_entries = only_vcs_entries(lockfile[section])
+            lockfile[section+'-vcs'] = vcs_entries
+            for key in vcs_entries.keys():
+                del lockfile[section][key]
+        return lockfile
 
     @property
     def lockfile_location(self):

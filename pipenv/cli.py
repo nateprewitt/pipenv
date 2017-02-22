@@ -91,7 +91,7 @@ def ensure_pipfile(validate=True):
     # Validate the Pipfile's contents.
     if validate and project.virtualenv_exists:
         # Ensure that Pipfile is using proper casing.
-        p = project._internal_parsed_pipfile
+        p = project._split_pipfile
         changed = ensure_proper_casing(pfile=p)
 
         # Write changes out to disk.
@@ -207,15 +207,12 @@ def do_install_dependencies(dev=False, only=False, bare=False, requirements=Fals
 
     # Install default dependencies, always.
     deps = lockfile['default'] if not only else {}
+    vcs_deps = lockfile.get('default-vcs', {})
 
     # Add development deps if --dev was passed.
     if dev:
         deps.update(lockfile['develop'])
-
-    vcs_deps = only_vcs_entries(deps)
-    # Remove vcs dependencies from file that will check hashes.
-    for entry in vcs_deps:
-        del deps[entry]
+        vcs_deps.update(lockfile.get('develop-vcs', {}))
 
     # Convert the deps to pip-compatible arguments.
     hashed_deps_path = convert_deps_to_pip(deps)
@@ -263,16 +260,11 @@ def do_install_dependencies(dev=False, only=False, bare=False, requirements=Fals
 def do_download_dependencies(dev=False, only=False, bare=False):
     """"Executes the download functionality."""
 
-    # Load the Pipfile.
-    p = project._internal_parsed_pipfile
-    pfile = pipfile.load(project.pipfile_location)
+    # Load the Lockfile.
+    lockfile = project._split_lockfile
 
-    # Load the Pipfile.
     if not bare:
         click.echo(crayons.yellow('Downloading dependencies from Pipfile...'))
-    lockfile = json.loads(pfile.lock())
-    vcs_list = p.get('packages-vcs', {})
-    lockfile['default'] = {k:v for k, v in lockfile['default'].items() if k not in vcs_list}
 
     # Install default dependencies, always.
     deps = lockfile['default'] if not only else {}
@@ -280,8 +272,6 @@ def do_download_dependencies(dev=False, only=False, bare=False):
     # Add development deps if --dev was passed.
     if dev:
         deps.update(lockfile['develop'])
-        vcs_list = p.get('dev-packages-vcs', {})
-        lockfile['develop'] = {k:v for k, v in lockfile['develop'].items() if k not in vcs_list}
 
     # Convert the deps to pip-compatible arguments.
     deps = convert_deps_to_pip(deps, r=False)
