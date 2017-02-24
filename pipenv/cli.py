@@ -19,6 +19,7 @@ import requests
 import pipfile
 from blindspin import spinner
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from requests.structures import CaseInsensitiveDict
 
 from .project import Project
 from .utils import (convert_deps_from_pip, convert_deps_to_pip, is_required_version,
@@ -420,23 +421,20 @@ def do_lock():
         names_map = do_download_dependencies(dev=True, only=True, bare=True)
 
     # Load the Pipfile and generate a lockfile.
-    p = project._internal_parsed_pipfile
+    p = project._split_pipfile
     pfile = pipfile.load(project.pipfile_location)
-    lockfile = json.loads(pfile.lock())
+    lockfile = json.loads(pfile.lock(), object_pairs_hook=CaseInsensitiveDict)
 
     # Pip freeze development dependencies.
     with spinner():
         results = get_downloads_info(names_map, 'dev-packages')
 
-    # Clear generated lockfile before updating.
-    lockfile['develop'] = {}
-
     # Add Development dependencies to lockfile.
     for dep in results:
         if dep:
             lockfile['develop'].update({dep['name']: {'hash': dep['hash'], 'version': '=={0}'.format(dep['version'])}})
-    if 'dev-packages-vcs' in p:
-        lockfile['develop'].update(p['dev-packages-vcs'])
+    #if 'dev-packages-vcs' in p:
+    #    lockfile['develop'].update(p['dev-packages-vcs'])
 
     with spinner():
         # Purge the virtualenv download dir, for default dependencies.
@@ -451,20 +449,22 @@ def do_lock():
     # Pip freeze default dependencies.
     results = get_downloads_info(names_map, 'packages')
 
-    # Clear generated lockfile before updating.
-    lockfile['default'] = {}
-
     # Add default dependencies to lockfile.
     for dep in results:
         if dep:
             lockfile['default'].update({dep['name']: {'hash': dep['hash'], 'version': '=={0}'.format(dep['version'])}})
 
-    if 'packages-vcs' in p:
-        lockfile['default'].update(p['packages-vcs'])
-    
+    #if 'packages-vcs' in p:
+    #    lockfile['default'].update(p['packages-vcs'])
+   
+    project.write_lockfile(lockfile) 
     # Write out lockfile.
-    with open(project.lockfile_location, 'w') as f:
-        f.write(json.dumps(lockfile, indent=4, separators=(',', ': ')))
+    #with open(project.lockfile_location, 'w') as f:
+    #    print(repr(lockfile))
+    #    write_dict = json.loads(repr(lockfile))
+        
+        #write_dict = dict((k,dict(v)) if isinstance(v, CaseInsensitiveDict) else (k,v) for k, v in lockfile.items())
+        #f.write(json.dumps(write_dict, indent=4, separators=(',', ': ')))
 
     # Purge the virtualenv download dir, for next time.
     with spinner():

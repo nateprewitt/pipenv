@@ -6,7 +6,7 @@ import pipfile
 import toml
 
 import delegator
-from requests.compat import OrderedDict
+from requests.structures import CaseInsensitiveDict
 
 from .utils import (format_toml, mkdir_p, convert_deps_from_pip,
     only_vcs_entries)
@@ -101,7 +101,7 @@ class Project(object):
     @property
     def parsed_pipfile(self):
         with open(self.pipfile_location) as f:
-            return toml.load(f, _dict=OrderedDict)
+            return toml.load(f, _dict=CaseInsensitiveDict)
 
     @property
     def _split_pipfile(self):
@@ -121,7 +121,7 @@ class Project(object):
         pfile = pipfile.load(self.pipfile_location)
         lockfile = json.loads(pfile.lock())
         for section in ('develop', 'default'):
-            if section in pfile:
+            if section in lockfile:
                 vcs_entries = only_vcs_entries(lockfile[section])
                 lockfile[section+'-vcs'] = vcs_entries
                 for key in vcs_entries.keys():
@@ -165,6 +165,11 @@ class Project(object):
         else:
             return [{u'url': u'https://pypi.python.org/simple', u'verify_ssl': True}]
 
+    def write_lockfile(self, lockfile):
+        standardized_lockfile = standardize_lockfile(lockfile)
+        with open(self.lockfile_location, 'w') as f:
+            f.write(json.dumps(standardized_lockfile, indent=4, separators=(',', ': ')))
+
     def remove_package_from_pipfile(self, package_name, dev=False):
 
         # Read and append Pipfile.
@@ -198,3 +203,14 @@ class Project(object):
 
         # Write Pipfile.
         self.write_toml(p)
+
+def standardize_lockfile(lockfile):
+    if isinstance(lockfile, dict):
+        out_dict = OrderedDict()
+        for k, v in lockfile.items():
+            out_dict[k] = standardize_lockfile(v)
+        return outdict
+    elif isinstance(lockfile, list):
+        return [standardize_lockfile(i) for i in lockfile]
+    else:
+        return lockfile
