@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-import json import os
+import json
+import os
 
 import pipfile
 import toml
@@ -105,14 +106,14 @@ class Project(object):
     @property
     def _internal_parsed_pipfile(self):
         """Pipfile divided by PyPI and external dependencies."""
-       pfile = self.parsed_pipfile
-       for section in ('packages', 'dev-packages'):
-           p_section = pfile.get(section, {})
+        pfile = self.parsed_pipfile
+        for section in ('packages', 'dev-packages'):
+            p_section = pfile.get(section, {})
 
-           for key in list(p_section.keys()):
-               # Normalize key name to pep426.
-               norm_key = pep426_name(key)
-               p_section[norm_key] = p_section.pop(key)
+            for key in list(p_section.keys()):
+                # Normalize key name to pep426.
+                norm_key = pep426_name(key)
+                p_section[norm_key] = p_section.pop(key)
 
         return pfile
 
