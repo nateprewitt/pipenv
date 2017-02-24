@@ -126,13 +126,18 @@ class Project(object):
 
         for section in sections:
             file_section = in_file.get(section, {})
+
             for key in list(file_section.keys()):
                 # Determine if entry is a VCS.
                 is_vcs = (isinstance(file_section[key], dict) and
-                          any([key for key in file_section[key].keys() if key in VCS_LIST]))
+                          any([k for k in file_section[key].keys() if k in VCS_LIST]))
 
                 if is_vcs:
-                    in_file[section+'-vcs'][key] = file_section.pop(key)
+                    vcs_section = section+'-vcs'
+                    if vcs_section not in in_file:
+                        in_file[vcs_section] = {}
+
+                    in_file[vcs_section][key] = file_section.pop(key)
 
         return in_file
 
