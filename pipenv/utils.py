@@ -4,6 +4,11 @@ import tempfile
 
 import requirements
 
+try:
+    from HTMLParser import HTMLParser
+except ImportError:
+    from html.parser import HTMLParser
+
 # List of version control systems we support.
 VCS_LIST = ('git', 'svn', 'hg', 'bzr')
 
@@ -155,3 +160,35 @@ def only_vcs_entries(pfile):
        if isinstance(v, dict) and len([key for key in v.keys() if key in VCS_LIST]) >= 1:
            vcs_entries.update({k: v})
    return vcs_entries
+
+
+def pep426_name(name):
+    """Normalize package name to pep426 style standard."""
+    return name.lower().replace('_','-')
+
+
+def proper_case(package_name):
+    """Properly case project name from pypi.org"""
+    # Capture tag contents here.
+    collected = []
+
+    class SimpleHTMLParser(HTMLParser):
+        def handle_data(self, data):
+            # Remove extra blank data from https://pypi.org/simple
+            data = data.strip()
+            if len(data) > 2:
+                collected.append(data)
+
+    # Hit the simple API.
+    r = requests.get('https://pypi.org/simple/{0}'.format(package_name))
+    if not r.ok:
+        raise IOError('Unable to find package {0} in PyPI repository.'.format(crayons.green(package_name)))
+
+    # Parse the HTML.
+    parser = SimpleHTMLParser()
+    parser.feed(r.text)
+
+    r = parse.parse('Links for {name}', collected[1])
+    good_name = r['name']
+
+    return good_name

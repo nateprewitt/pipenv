@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-import json
-import os
+import json import os
 
 import pipfile
 import toml
@@ -9,7 +8,7 @@ import delegator
 from requests.structures import CaseInsensitiveDict
 
 from .utils import (format_toml, mkdir_p, convert_deps_from_pip,
-    only_vcs_entries)
+    proper_case)
 from .environments import PIPENV_MAX_DEPTH, PIPENV_VENV_IN_PROJECT
 
 
@@ -104,28 +103,70 @@ class Project(object):
             return toml.load(f, _dict=CaseInsensitiveDict)
 
     @property
-    def _split_pipfile(self):
-        """Pipfile divided by PyPI and external dependencies"""
-        pfile = self.parsed_pipfile
-        for section in ('packages', 'dev-packages'):
-            if section in pfile.keys():
-                vcs_entries = only_vcs_entries(pfile[section])
-                pfile[section+'-vcs'] = vcs_entries
-                for key in vcs_entries.keys():
-                    del pfile[section][key]
+    def _internal_parsed_pipfile(self):
+        """Pipfile divided by PyPI and external dependencies."""
+       pfile = self.parsed_pipfile
+       for section in ('packages', 'dev-packages'):
+           p_section = pfile.get(section, {})
+
+           for key in list(p_section.keys()):
+               # Normalize key name to pep426.
+               norm_key = pep426_name(key)
+               p_section[norm_key] = p_section.pop(key)
+
         return pfile
 
+    def split_vcs(self, in_file, type_):
+        """Split VCS dependencies out from file."""
+        if type_.lower() == 'pipfile':
+            sections = ('packages', 'dev-packages')
+        elif type_.lower() == 'pipfile.lock':
+            sections = ('default', 'develop')
+
+        for section in sections:
+            file_section = in_file.get(section, {})
+            for keys in list(file_section.keys()):
+                # Determine if entry is a VCS.
+                is_vcs = (isinstance(lock_section[key], dict) and
+                          any([key for key in lock_section[key].keys() if key in VCS_LIST]))
+
+                if is_vcs:
+                    lockfile[section+'-vcs'][key] = lock_section.pop(key)
+
+        return in_file
+
+    def recase_file(self, in_file, type_):
+        """Recase file before writing to output"""
+        if type_.lower() == 'pipfile':
+            sections = ('packages', 'dev-packages')
+        elif type_.lower() == 'pipfile.lock':
+            sections = ('default', 'develop')
+
+        for section in sections:
+            file_section = in_file.get(section, {})
+            
+            for key in list(file_section.keys()):
+                try:
+                    cased_key = proper_case(key)
+                except IOError:
+                    cased_key = key
+                file_section[cased_key] = file_section.pip(key)
+
+        return in_file
+           
     @property
-    def _split_lockfile(self):
+    def _internal_parsed_lockfile(self):
         """Pipfile.lock divided by PyPI and external dependencies"""
         pfile = pipfile.load(self.pipfile_location)
         lockfile = json.loads(pfile.lock())
-        for section in ('develop', 'default'):
-            if section in lockfile:
-                vcs_entries = only_vcs_entries(lockfile[section])
-                lockfile[section+'-vcs'] = vcs_entries
-                for key in vcs_entries.keys():
-                    del lockfile[section][key]
+
+        for section in ('default', 'develop'):
+            lock_section = lockfile.get(section, {})
+
+            for keys in list(lock_section.keys()):
+                norm_key = pep426_name(key)
+                lockfile[section][norm_key] = lock_section.pop(key)
+
         return lockfile
 
     @property
@@ -173,21 +214,22 @@ class Project(object):
     def remove_package_from_pipfile(self, package_name, dev=False):
 
         # Read and append Pipfile.
-        p = self.parsed_pipfile
+        p = self._internal_parsed_pipfile
+
+        package_name = pep426_name(package_name)
 
         key = 'dev-packages' if dev else 'packages'
 
-        if key in p:
-            if package_name in p[key]:
-                del p[key][package_name]
+        if key in p and package_name in p[key]:
+            del p[key][package_name] 
 
         # Write Pipfile.
-        self.write_toml(p)
+        self.write_toml(recase_file(p))
 
     def add_package_to_pipfile(self, package_name, dev=False):
 
         # Read and append Pipfile.
-        p = self.parsed_pipfile
+        p = self._internal_parsed_pipfile
 
         key = 'dev-packages' if dev else 'packages'
 
@@ -202,15 +244,4 @@ class Project(object):
         p[key][package_name] = package[package_name]
 
         # Write Pipfile.
-        self.write_toml(p)
-
-def standardize_lockfile(lockfile):
-    if isinstance(lockfile, dict):
-        out_dict = OrderedDict()
-        for k, v in lockfile.items():
-            out_dict[k] = standardize_lockfile(v)
-        return outdict
-    elif isinstance(lockfile, list):
-        return [standardize_lockfile(i) for i in lockfile]
-    else:
-        return lockfile
+        self.write_toml(recase_file(p))

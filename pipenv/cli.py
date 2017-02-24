@@ -23,15 +23,10 @@ from requests.structures import CaseInsensitiveDict
 
 from .project import Project
 from .utils import (convert_deps_from_pip, convert_deps_to_pip, is_required_version,
-    only_vcs_entries)
+    proper_case)
 from .__version__ import __version__
 from . import pep508checker
 from .environments import PIPENV_COLORBLIND, PIPENV_NOSPIN, PIPENV_SHELL_COMPAT, PIPENV_VENV_IN_PROJECT
-
-try:
-    from HTMLParser import HTMLParser
-except ImportError:
-    from html.parser import HTMLParser
 
 # Backport required for earlier versions of Python.
 if sys.version_info < (3, 3):
@@ -365,10 +360,6 @@ def do_create_virtualenv(three=None, python=None):
     do_where(virtualenv=True, bare=False)
 
 
-def is_version(text):
-    return re.match('^[\d]+\.[\d]+.*', text) or False
-
-
 def parse_download_fname(fname, name):
     fname, fextension = os.path.splitext(fname)
 
@@ -611,33 +602,6 @@ def which_pip(allow_global=False):
         return distutils.spawn.find_executable('pip')
 
     return which('pip')
-
-
-def proper_case(package_name):
-
-    # Capture tag contents here.
-    collected = []
-
-    class SimpleHTMLParser(HTMLParser):
-        def handle_data(self, data):
-            # Remove extra blank data from https://pypi.org/simple
-            data = data.strip()
-            if len(data) > 2:
-                collected.append(data)
-
-    # Hit the simple API.
-    r = requests.get('https://pypi.org/simple/{0}'.format(package_name))
-    if not r.ok:
-        raise IOError('Unable to find package {0} in PyPI repository.'.format(crayons.green(package_name)))
-
-    # Parse the HTML.
-    parser = SimpleHTMLParser()
-    parser.feed(r.text)
-
-    r = parse.parse('Links for {name}', collected[1])
-    good_name = r['name']
-
-    return good_name
 
 
 def format_help(help):
