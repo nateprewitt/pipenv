@@ -23,7 +23,7 @@ from requests.structures import CaseInsensitiveDict
 
 from .project import Project
 from .utils import (convert_deps_from_pip, convert_deps_to_pip, is_required_version,
-    proper_case)
+    proper_case, pep426_name)
 from .__version__ import __version__
 from . import pep508checker
 from .environments import PIPENV_COLORBLIND, PIPENV_NOSPIN, PIPENV_SHELL_COMPAT, PIPENV_VENV_IN_PROJECT
@@ -87,7 +87,7 @@ def ensure_pipfile(validate=True):
     # Validate the Pipfile's contents.
     if validate and project.virtualenv_exists:
         # Ensure that Pipfile is using proper casing.
-        p = project._split_pipfile
+        p = project._internal_parsed_pipfile
         changed = ensure_proper_casing(pfile=p)
 
         # Write changes out to disk.
@@ -187,22 +187,16 @@ def do_install_dependencies(dev=False, only=False, bare=False, requirements=Fals
     if requirements:
         bare = True
 
-    # Load the Pipfile.
-    p = pipfile.load(project.pipfile_location)
-    lockfile = project._split_lockfile
-
-    '''
     # Load the lockfile if it exists, or if only is being used (e.g. lock is being used).
     if only or not project.lockfile_exists:
         if not bare:
             click.echo(crayons.yellow('Installing dependencies from Pipfile...'))
-            lockfile = json.loads(p.lock())
+            lockfile = project.split_vcs(project._internal_parsed_lockfile, 'pipfile.lock')
     else:
         if not bare:
             click.echo(crayons.yellow('Installing dependencies from Pipfile.lock...'))
         with open(project.lockfile_location) as f:
-            lockfile = json.load(f)
-    '''
+            lockfile = project.split_vcs(json.load(f), 'pipfile.lock')
 
     # Install default dependencies, always.
     deps = lockfile['default'] if not only else {}
@@ -260,7 +254,7 @@ def do_download_dependencies(dev=False, only=False, bare=False):
     """"Executes the download functionality."""
 
     # Load the Lockfile.
-    lockfile = project._split_lockfile
+    lockfile = project.split_vcs(project._internal_parsed_lockfile, 'pipfile.lock')
 
     if not bare:
         click.echo(crayons.yellow('Downloading dependencies from Pipfile...'))
@@ -311,6 +305,8 @@ def parse_install_output(output):
         name = lines[0].split('(')[0]
         # Strip version specification. e.g. package; python-version=2.6
         name = name.split(';')[0]
+        # Standardize name to pep426.
+        name = pep426_name(name.strip())
 
         for line in lines:
             r = parse.parse('Saved {file}', line.strip())
@@ -323,7 +319,7 @@ def parse_install_output(output):
             # Unencode percent-encoded values like ``!`` in version number.
             fname = requests.compat.unquote(fname)
 
-            names.append((fname, name.strip()))
+            names.append((fname, name))
             break
 
     return names
@@ -412,9 +408,8 @@ def do_lock():
         names_map = do_download_dependencies(dev=True, only=True, bare=True)
 
     # Load the Pipfile and generate a lockfile.
-    p = project._split_pipfile
-    pfile = pipfile.load(project.pipfile_location)
-    lockfile = json.loads(pfile.lock(), object_pairs_hook=CaseInsensitiveDict)
+    p = project._internal_parsed_pipfile
+    lockfile = project._internal_parsed_lockfile
 
     # Pip freeze development dependencies.
     with spinner():
@@ -447,15 +442,12 @@ def do_lock():
 
     #if 'packages-vcs' in p:
     #    lockfile['default'].update(p['packages-vcs'])
-   
-    project.write_lockfile(lockfile) 
+  
+    lockfile = project.recase_file(lockfile, 'pipfile.lock')
+ 
     # Write out lockfile.
-    #with open(project.lockfile_location, 'w') as f:
-    #    print(repr(lockfile))
-    #    write_dict = json.loads(repr(lockfile))
-        
-        #write_dict = dict((k,dict(v)) if isinstance(v, CaseInsensitiveDict) else (k,v) for k, v in lockfile.items())
-        #f.write(json.dumps(write_dict, indent=4, separators=(',', ': ')))
+    with open(project.lockfile_location, 'w') as f:
+        f.write(json.dumps(lockfile, indent=4, separators=(',', ': ')))
 
     # Purge the virtualenv download dir, for next time.
     with spinner():

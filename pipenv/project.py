@@ -6,10 +6,10 @@ import pipfile
 import toml
 
 import delegator
-from requests.structures import CaseInsensitiveDict
+from requests.compat import OrderedDict
 
 from .utils import (format_toml, mkdir_p, convert_deps_from_pip,
-    proper_case)
+    proper_case, pep426_name, VCS_LIST)
 from .environments import PIPENV_MAX_DEPTH, PIPENV_VENV_IN_PROJECT
 
 
@@ -101,7 +101,7 @@ class Project(object):
     @property
     def parsed_pipfile(self):
         with open(self.pipfile_location) as f:
-            return toml.load(f, _dict=CaseInsensitiveDict)
+            return toml.load(f, _dict=OrderedDict)
 
     @property
     def _internal_parsed_pipfile(self):
@@ -126,13 +126,13 @@ class Project(object):
 
         for section in sections:
             file_section = in_file.get(section, {})
-            for keys in list(file_section.keys()):
+            for key in list(file_section.keys()):
                 # Determine if entry is a VCS.
-                is_vcs = (isinstance(lock_section[key], dict) and
-                          any([key for key in lock_section[key].keys() if key in VCS_LIST]))
+                is_vcs = (isinstance(file_section[key], dict) and
+                          any([key for key in file_section[key].keys() if key in VCS_LIST]))
 
                 if is_vcs:
-                    lockfile[section+'-vcs'][key] = lock_section.pop(key)
+                    in_file[section+'-vcs'][key] = file_section.pop(key)
 
         return in_file
 
@@ -151,7 +151,7 @@ class Project(object):
                     cased_key = proper_case(key)
                 except IOError:
                     cased_key = key
-                file_section[cased_key] = file_section.pip(key)
+                file_section[cased_key] = file_section.pop(key)
 
         return in_file
            
@@ -164,7 +164,7 @@ class Project(object):
         for section in ('default', 'develop'):
             lock_section = lockfile.get(section, {})
 
-            for keys in list(lock_section.keys()):
+            for key in list(lock_section.keys()):
                 norm_key = pep426_name(key)
                 lockfile[section][norm_key] = lock_section.pop(key)
 
@@ -225,7 +225,7 @@ class Project(object):
             del p[key][package_name] 
 
         # Write Pipfile.
-        self.write_toml(recase_file(p))
+        self.write_toml(self.recase_file(p, 'pipfile'))
 
     def add_package_to_pipfile(self, package_name, dev=False):
 
@@ -245,4 +245,4 @@ class Project(object):
         p[key][package_name] = package[package_name]
 
         # Write Pipfile.
-        self.write_toml(recase_file(p))
+        self.write_toml(self.recase_file(p, 'pipfile'))

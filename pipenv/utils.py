@@ -2,6 +2,8 @@
 import os
 import tempfile
 
+import parse
+import requests
 import requirements
 
 try:

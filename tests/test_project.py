@@ -90,7 +90,7 @@ class TestProject():
         # Confirm initial state of Pipfile.
         p = proj.parsed_pipfile
         assert list(p['packages'].keys()) == ['requests', 'Flask']
-        assert list(p['dev-packages'].keys()) == ['click']
+        assert list(p['dev-packages'].keys()) == ['click', 'Django']
 
         # Remove requests from packages and click from dev-packages.
         proj.remove_package_from_pipfile('requests')
