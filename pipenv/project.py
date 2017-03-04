@@ -172,6 +172,14 @@ class Project(object):
         with open(self.lockfile_location) as lock:
             return json.load(lock)
 
+    @property
+    def config_file(self):
+        loc = os.sep.join([self.pipfile_location, '.pipenv'])
+        if os.path.isfile(loc):
+            with open(loc, 'r') as f:
+                return toml.loads(f.read())
+        return {}
+
     def create_pipfile(self):
         data = {u'source': [{u'url': u'https://pypi.python.org/simple', u'verify_ssl': True}], u'packages': {}, 'dev-packages': {}}
         self.write_toml(data, 'Pipfile')

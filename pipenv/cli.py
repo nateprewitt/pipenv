@@ -115,9 +115,16 @@ def ensure_virtualenv(three=None, python=None):
 
 def ensure_project(three=None, python=None, validate=True):
     """Ensures both Pipfile and virtualenv exist for the project."""
+    ensure_environment()
     ensure_pipfile(validate=validate)
     ensure_virtualenv(three=three, python=python)
 
+
+def ensure_environment():
+    config = proj.config_file['environment']
+    for key in config.keys():
+        if key not in os.environ:
+            os.environ[key] = config[key]
 
 def ensure_proper_casing(pfile):
     """Ensures proper casing of Pipfile packages, writes changes to disk."""
