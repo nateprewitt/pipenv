@@ -85,7 +85,7 @@ def convert_deps_to_pip(deps, r=True):
         version = ''
 
         # Get rid of '*'.
-        if deps[dep] == '*' or str(extra) == '{}':
+        if deps[dep] == '*' or str(extra) == '{}' or list(extra.keys()) == ['version']:
             extra = ''
 
         if 'hash' in deps[dep]:
