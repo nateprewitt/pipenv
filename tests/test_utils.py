@@ -94,6 +94,14 @@ class TestUtils:
             dep = pipenv.utils.convert_deps_from_pip(dep)
             assert 'pipenv requires an #egg fragment for vcs' in str(e)
 
+        # vcs dependency with extras
+        dep = 'git+https://github.com/kennethretiz/requests.git@v2.13.0#egg=requests[socks]'
+        dep = pipenv.utils.convert_deps_from_pip(dep)
+        assert dep == {'requests': {'git': 'https://github.com/kennethretiz/requests.git',
+                                    'ref': 'v2.13.0',
+                                    'extras': ['socks']}}
+
+
 
     @pytest.mark.parametrize('version, specified_ver, expected', [
         ('*', '*', True),
