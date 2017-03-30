@@ -180,7 +180,7 @@ class Project(object):
         if path is None:
             path = self.pipfile_location
 
-        formatted_data = format_toml(toml.dumps(data))
+        formatted_data = format_toml(toml.dumps(data, preserve=True))
         with open(path, 'w') as f:
             f.write(formatted_data)
 

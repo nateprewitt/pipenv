@@ -166,3 +166,21 @@ class TestProject():
         assert lockfile['_meta']['hash'] == {'sha256': 'ff0b0584610a7091156f32ca7d5adab8f29cb17263c6d63bcab42de2137c4787'}
 
         delegator.run('rm -fr test_internal_lockfile')
+
+    def test_write_toml(self):
+        pipenv_file = ('[[source]]\nurl = \'https://pypi.python.org/simple\'\n'
+                       'verify_ssl = true\n\n\n[packages]\n'
+                       'Requests = { extras = [\'socks\'] }\nFlask_Auth = \'*\'\n\n\n'
+                       '[dev-packages]\nclick = \'*\'\nDjango = {git = '
+                       '"https://github.com/django/django.git", ref="1.10"}\n\n\n'
+                       '[packages.toml]\ngit = \'https://github.com/uiri/toml.git\'\n'
+                       'ref = \'0.9.2\'\n')
+        f = toml.loads(pipenv_file)
+        assert 'Requests' in f
+        assert 'toml' in f
+        assert 'Django' in f
+
+        f['click'] = '*'
+        out_file = toml.dumps(f, preserve=True)
+        assert '[packages.toml]\ngit = \'https://github.com/uiri/toml.git\'\n' in out_file
+        assert 'Django = {git = "https://github.com/django/django.git", ref="1.10"}\n' in out_file

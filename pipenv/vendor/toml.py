@@ -13,17 +13,22 @@ class TomlTz(datetime.tzinfo):
             self._raw_offset = "+00:00"
         else:
             self._raw_offset = toml_offset
-        self._hours = int(self._raw_offset[:3])
+        self._sign = -1 if self._raw_offset[0] == '-' else 1
+        self._hours = int(self._raw_offset[1:3])
         self._minutes = int(self._raw_offset[4:6])
 
     def tzname(self, dt):
         return "UTC"+self._raw_offset
 
     def utcoffset(self, dt):
-        return datetime.timedelta(hours=self._hours, minutes=self._minutes)
+        return self._sign * datetime.timedelta(hours=self._hours, minutes=self._minutes)
 
     def dst(self, dt):
         return datetime.timedelta(0)
+
+class InlineTableDict(dict):
+    def __init__(self, *args):
+        dict.__init__(self, args)
 
 try:
     _range = xrange
@@ -34,7 +39,22 @@ except NameError:
     unichr = chr
 
 def load(f, _dict=dict):
-    """Returns a dictionary containing the named file parsed as toml."""
+    """Parses named file or files as toml and returns a dictionary
+
+    Args:
+        f: Path to the file to open, array of files to read into single dict
+           or a file descriptor
+        _dict: (optional) Specifies the class of the returned toml dictionary
+
+    Returns:
+        Parsed toml file represented as a dictionary
+
+    Raises:
+        TypeError -- When array of non-strings is passed
+        TypeError -- When f is invalid type
+        TomlDecodeError: Error while decoding toml
+    """
+
     if isinstance(f, basestring):
         with open(f) as ffile:
             return loads(ffile.read(), _dict)
@@ -54,12 +74,25 @@ def load(f, _dict=dict):
 _groupname_re = re.compile(r'^[A-Za-z0-9_-]+$')
 
 def loads(s, _dict=dict):
-    """Returns a dictionary containing s, a string, parsed as toml."""
+    """Parses string as toml
+
+    Args:
+        s: String to be parsed
+        _dict: (optional) Specifies the class of the returned toml dictionary
+
+    Returns:
+        Parsed toml file represented as a dictionary
+
+    Raises:
+        TypeError: When a non-string is passed
+        TomlDecodeError: Error while decoding toml
+    """
+
     implicitgroups = []
     retval = _dict()
     currentlevel = retval
     if not isinstance(s, basestring):
-        raise TypeError("What exactly are you trying to pull?")
+        raise TypeError("Expecting something like a string")
     try:
         s = s.decode('utf8')
     except AttributeError:
@@ -296,7 +329,7 @@ def _load_inline_object(line, currentlevel, multikey=False, multibackslash=False
         _, value = candidate_group.split('=', 1)
         value = value.strip()
         if (value[0] == value[-1] and value[0] in ('"', "'")) or \
-                value[0] in '0123456789' or \
+                value[0] in '-0123456789' or \
                 value in ('true', 'false') or \
                 value[0] == "[" and value[-1] == "]":
             groups.append(candidate_group)
@@ -310,9 +343,30 @@ def _load_inline_object(line, currentlevel, multikey=False, multibackslash=False
 # Matches a TOML number, which allows underscores for readability
 _number_with_underscores = re.compile('([0-9])(_([0-9]))*')
 
+def _strictly_valid_num(n):
+    n = n.strip()
+    if n[0] == '_':
+        return False
+    if n[-1] == '_':
+        return False
+    if "_." in n or "._" in n:
+        return False
+    if len(n) == 1:
+        return True
+    if n[0] == '0' and n[1] != '.':
+        return False
+    if n[0] == '+' or n[0] == '-':
+        n = n[1:]
+        if n[0] == '0' and n[1] != '.':
+            return False
+    if '__' in n:
+        return False
+    return True
+
 def _load_line(line, currentlevel, multikey, multibackslash):
     i = 1
     pair = line.split('=', i)
+    strictly_valid = _strictly_valid_num(pair[-1])
     if _number_with_underscores.match(pair[-1]):
         pair[-1] = pair[-1].replace('_', '')
     while pair[-1][0] != ' ' and pair[-1][0] != '\t' and \
@@ -331,6 +385,8 @@ def _load_line(line, currentlevel, multikey, multibackslash):
         pair = line.split('=', i)
         if prev_val == pair[-1]:
             raise TomlDecodeError("Invalid date or number")
+        if strictly_valid:
+            strictly_valid = _strictly_valid_num(pair[-1])
     pair = ['='.join(pair[:-1]).strip(), pair[-1].strip()]
     if (pair[0][0] == '"' or pair[0][0] == "'") and \
             (pair[0][-1] == '"' or pair[0][-1] == "'"):
@@ -350,7 +406,7 @@ def _load_line(line, currentlevel, multikey, multibackslash):
             multilinestr = pair[1] + "\n"
         multikey = pair[0]
     else:
-        value, vtype = _load_value(pair[1])
+        value, vtype = _load_value(pair[1], strictly_valid)
     try:
         currentlevel[pair[0]]
         raise TomlDecodeError("Duplicate keys!")
@@ -359,6 +415,8 @@ def _load_line(line, currentlevel, multikey, multibackslash):
             return multikey, multilinestr, multibackslash
         else:
             currentlevel[pair[0]] = value
+    except:
+        raise TomlDecodeError("Duplicate keys!")
 
 def _load_date(val):
     microsecond = 0
@@ -419,22 +477,28 @@ _escapes = ['0', 'b', 'f', 'n', 'r', 't', '"'] # content after the \
 _escapedchars = ['\0', '\b', '\f', '\n', '\r', '\t', '\"'] # What it should be replaced by
 _escape_to_escapedchars = dict(zip(_escapes, _escapedchars)) # Used for substitution
 
-# Regexp that matches escaped value, checking the parity of the number
-# of backslashes
-_escapes_re = re.compile("""
-        (?P<prefix>([^\\\\](\\\\\\\\)*)) # Parity of the number of backslashs
-        \\\\                             # The actual backslash before the escape
-        (?P<escape>[%s])                 # The escape
-        """ % ''.join(_escapes),
-        re.VERBOSE)
-
 def _unescape(v):
     """Unescape characters in a TOML string."""
-    v = _escapes_re.sub(lambda match: match.group('prefix') + _escape_to_escapedchars[match.group('escape')], v)
-    v = v.replace("\\\\", "\\")
+    i = 0
+    backslash = False
+    while i < len(v):
+        if backslash:
+            backslash = False
+            if v[i] in _escapes:
+                v = v[:i-1] + _escape_to_escapedchars[v[i]] + v[i+1:]
+            elif v[i] == '\\':
+                v = v[:i-1] + v[i:]
+            elif v[i] == 'u' or v[i] == 'U':
+                i += 1
+            else:
+                raise TomlDecodeError("Reserved escape sequence used")
+            continue
+        elif v[i] == '\\':
+            backslash = True
+        i += 1
     return v
 
-def _load_value(v):
+def _load_value(v, strictly_valid=True):
     if v == 'true':
         return (True, "bool")
     elif v == 'false':
@@ -489,20 +553,26 @@ def _load_value(v):
     elif v[0] == '[':
         return (_load_array(v), "array")
     elif v[0] == '{':
-        inline_object = {}
+        inline_object = InlineTableDict()
         _load_inline_object(v, inline_object)
         return (inline_object, "inline_object")
     else:
         parsed_date = _load_date(v)
         if parsed_date is not None:
             return (parsed_date, "date")
+        if not strictly_valid:
+            raise TomlDecodeError("Weirdness with leading zeroes or underscores "
+                                  "in your number.")
         itype = "int"
         neg = False
         if v[0] == '-':
             neg = True
             v = v[1:]
-        if '.' in v or 'e' in v:
-            if v.split('.', 1)[1] == '':
+        elif v[0] == '+':
+            v = v[1:]
+        v = v.replace('_', '')
+        if '.' in v or 'e' in v or 'E' in v:
+            if '.' in v and v.split('.', 1)[1] == '':
                 raise TomlDecodeError("This float is missing digits after the point")
             if v[0] not in '0123456789':
                 raise TomlDecodeError("This float doesn't have a leading digit")
@@ -523,7 +593,7 @@ def _load_array(a):
         tmpa = a[1:-1].strip()
         if tmpa != '' and tmpa[0] == '"':
             strarray = True
-        if '{' not in a[1:-1]:
+        if not a[1:-1].strip().startswith('{'):
             a = a[1:-1].split(',')
         else:
             # a is an inline object, we must find the matching parenthesis to difine groups
@@ -531,21 +601,21 @@ def _load_array(a):
             start_group_index = 1
             end_group_index = 2
             in_str = False
-            while end_group_index < len(a[1:-1]):
+            while end_group_index < len(a[1:]):
                 if a[end_group_index] == '"' or a[end_group_index] == "'":
                     in_str = not in_str
-                if a[end_group_index] == '}' and not in_str:
-                    # Increase end_group_index by 1 to get the closing bracket
+                if in_str or a[end_group_index] != '}':
                     end_group_index += 1
-                    new_a.append(a[start_group_index:end_group_index])
-                    # The next start index is at least after the closing bracket, a closing bracket
-                    # can be followed by a comma since we are in an array.
-                    start_group_index = end_group_index + 1
-                    while a[start_group_index] != '{' and start_group_index < len(a[1:-1]):
-                        start_group_index += 1
-                    end_group_index = start_group_index + 1
-                else:
-                    end_group_index += 1
+                    continue
+                # Increase end_group_index by 1 to get the closing bracket
+                end_group_index += 1
+                new_a.append(a[start_group_index:end_group_index])
+                # The next start index is at least after the closing bracket, a closing bracket
+                # can be followed by a comma since we are in an array.
+                start_group_index = end_group_index + 1
+                while start_group_index < len(a[1:]) and a[start_group_index] != '{':
+                    start_group_index += 1
+                end_group_index = start_group_index + 1
             a = new_a
         b = 0
         if strarray:
@@ -584,23 +654,48 @@ def _load_array(a):
     return retval
 
 def dump(o, f):
-    """Writes out to f the toml corresponding to o. Returns said toml."""
+    """Writes out dict as toml to a file
+
+    Args:
+        o: Object to dump into toml
+        f: File descriptor where the toml should be stored
+
+    Returns:
+        String containing the toml corresponding to dictionary
+
+    Raises:
+        TypeError: When anything other than file descriptor is passed
+    """
+
     if not f.write:
         raise TypeError("You can only dump an object to a file descriptor")
     d = dumps(o)
     f.write(d)
     return d
 
-def dumps(o):
-    """Returns a string containing the toml corresponding to o, a dictionary"""
+def dumps(o, preserve=False):
+    """Stringifies input dict as toml
+
+    Args:
+        o: Object to dump into toml
+
+        preserve: Boolean parameter. If true, preserve inline tables.
+
+    Returns:
+        String containing the toml corresponding to dict
+    """
+
     retval = ""
     addtoretval, sections = _dump_sections(o, "")
     retval += addtoretval
     while sections != {}:
         newsections = {}
         for section in sections:
-            addtoretval, addtosections = _dump_sections(sections[section], section)
+            addtoretval, addtosections = _dump_sections(sections[section],
+                                                        section, preserve)
             if addtoretval:
+                if retval and retval[-2:] != "\n\n":
+                    retval += "\n"
                 retval += "["+section+"]\n"
                 retval += addtoretval
             for s in addtosections:
@@ -608,7 +703,7 @@ def dumps(o):
         sections = newsections
     return retval
 
-def _dump_sections(o, sup):
+def _dump_sections(o, sup, preserve=False):
     retstr = ""
     if sup != "" and sup[-1] != ".":
         sup += '.'
@@ -629,7 +724,7 @@ def _dump_sections(o, sup):
                         arrayoftables = True
             if arrayoftables:
                 for a in o[section]:
-                    arraytabstr = ""
+                    arraytabstr = "\n"
                     arraystr += "[["+sup+qsection+"]]\n"
                     s, d = _dump_sections(a, sup+qsection)
                     if s:
@@ -652,10 +747,29 @@ def _dump_sections(o, sup):
                 if o[section] is not None:
                     retstr += (qsection + " = " +
                                str(_dump_value(o[section])) + '\n')
+        elif preserve and isinstance(o[section], InlineTableDict):
+            retstr += (section + " = " + _dump_inline_table(o[section]))
         else:
             retdict[qsection] = o[section]
     retstr += arraystr
     return (retstr, retdict)
+
+def _dump_inline_table(section):
+    """Preserve inline table in its compact syntax instead of expanding
+    into subsection.
+
+    https://github.com/toml-lang/toml#user-content-inline-table
+    """
+    retval = ""
+    if isinstance(section, dict):
+        val_list = []
+        for k, v in section.items():
+            val = _dump_inline_table(v)
+            val_list.append(k + " = " + val)
+        retval += "{ " + ", ".join(val_list) + " }\n"
+        return retval
+    else:
+        return str(_dump_value(section))
 
 def _dump_value(v):
     if isinstance(v, list):
