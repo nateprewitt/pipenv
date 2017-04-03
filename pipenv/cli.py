@@ -992,17 +992,21 @@ def run(command, args, no_interactive=False, three=None, python=False):
 
     # Automatically enable --no-interactive, when applicable.
     if not sys.stdout.isatty():
+        print("NOT INTERACTIVE")
         no_interactive = True
 
     # Spawn the new process, and interact with it.
     try:
+        print("SPAWNING", command, list(args))
         c = pexpect.spawn(which(command), list(args))
+        print("SPAWNED")
     except pexpect.exceptions.ExceptionPexpect:
         click.echo(crayons.red('The command ({0}) was not found within the virtualenv!'.format(which(command))))
         sys.exit(1)
 
     # Windows!
     except AttributeError:
+        print("WINDOWS")
         import subprocess
         p = subprocess.Popen([which(command)] + list(args), shell=True, universal_newlines=True)
         p.communicate()
@@ -1010,10 +1014,14 @@ def run(command, args, no_interactive=False, three=None, python=False):
 
     # Interact with the new shell.
     if no_interactive:
+        print("WAIT NON INTERACTIVE")
         c.wait()
     else:
+        print("WE ARE INTERACTIVE")
+        print(c.out)
         c.interact()
         c.close()
+    print(c.read())
     sys.exit(c.exitstatus)
 
 
