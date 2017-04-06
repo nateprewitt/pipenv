@@ -180,6 +180,8 @@ class Command(object):
         if self._uses_subprocess:
             # consume stdout and stderr
             stdout, stderr = self.subprocess.communicate()
+            print(type(stdout), type(stderr))
+            print(stdout)
             self.__out = stdout
             self.__err = stderr
         else:
