@@ -1,3 +1,5 @@
+import os
+
 from hashlib import sha256
 from base64 import urlsafe_b64encode
 
@@ -12,10 +14,11 @@ class TestProject():
         hash = urlsafe_b64encode(
             sha256(proj.pipfile_location.encode()).digest()[:6]).decode()
 
-        assert proj.name == 'pipenv'
+        name = proj.pipfile_location.split(os.sep)[-2]
+        assert proj.name == name
         assert proj.pipfile_exists
         assert proj.virtualenv_exists
-        assert proj.virtualenv_name == 'pipenv-' + hash
+        assert proj.virtualenv_name == '{0}-{1}'.format(name, hash)
 
     def test_proper_names(self):
         proj = pipenv.project.Project()
