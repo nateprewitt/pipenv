@@ -324,3 +324,14 @@ class TestPipenv():
         # Cleanup.
         os.chdir('..')
         delegator.run('rm -fr test_pipenv_requirements')
+
+    def test_install_in_another_venv(self):
+        delegator.run('mkdir test_pipenv_in_venv')
+        os.chdir('test_pipenv_in_venv')
+
+        assert delegator.run('python -m virtualenv env').return_code == 0
+        assert delegator.run('env/bin/pip install pipenv').return_code == 0
+        assert delegator.run('env/bin/pipenv install pyramid').return_code == 0
+
+        os.chdir('..')
+        delegator.run('rm -fr test_pipenv_in_venv')
