@@ -80,7 +80,9 @@ class TestPipenv():
                     '-e git+https://github.com/kennethreitz/tablib.git@v0.11.5#egg=tablib\n'
                     'six==1.10.0\n')
 
-        assert delegator.run('pipenv --python python').return_code == 0
+        c = delegator.run('pipenv --python python')
+        print(c.out, c.err)
+        assert c.return_code == 0
         assert delegator.run('pipenv lock').return_code == 0
 
         pipfile_output = delegator.run('cat Pipfile').out
