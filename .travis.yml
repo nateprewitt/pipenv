@@ -12,6 +12,7 @@ python:
 
 # command to install dependencies
 install:
+  - "pip install --upgrade pip"
   - "python setup.py develop"
   - "pipenv install --dev"
 # command to run tests
