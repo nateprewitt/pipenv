@@ -1,3 +1,5 @@
+Unreleased:
+ - Fixed bad attribute call on date checks.
 8.3.4:
  - Enhanced sha messaging — lockfile short shas are now displayed.
  - Improve Windows unicode output.
